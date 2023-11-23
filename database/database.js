@@ -1,126 +1,88 @@
-const Knex = require('knex');
-const fs = require('fs');
 const dotenv = require('dotenv');
+const mysql = require('mysql2');
+
 dotenv.config();
 
-let pool;
-// createTcpPool initializes a TCP connection pool for a Cloud SQL
-// instance of Postgres.
-const createTcpPool = async (config) => {
-  // Note: Saving credentials in environment variables is convenient, but not
-  // secure - consider a more secure solution such as
-  // Cloud Secret Manager (https://cloud.google.com/secret-manager) to help
-  // keep secrets safe.
-  const dbConfig = {
-    client: 'pg',
-    connection: {
-      host: process.env.INSTANCE_HOST, // e.g. '127.0.0.1'
-      port: process.env.DB_PORT, // e.g. '5432'
-      user: process.env.DB_USER, // e.g. 'my-user'
-      password: process.env.DB_PASS, // e.g. 'my-user-password'
-      database: process.env.DB_NAME, // e.g. 'my-database'
-    },
-    // ... Specify additional properties here.
-    ...config,
-  };
-  // Establish a connection to the database.
-  return Knex(dbConfig);
-};
+// Create the connection pool. The pool-specific settings are the defaults
+const pool = mysql.createPool({
+  host: 'localhost',
+  user: 'root',
+  database: 'capstoneDB',
+  waitForConnections: true,
+  connectionLimit: 10,
+  maxIdle: 10, // max idle connections, the default value is the same as `connectionLimit`
+  idleTimeout: 60000, // idle connections timeout, in milliseconds, the default value 60000
+  queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
+});
 
-const createPool = async () => {
-  const config = { pool: {} };
+// Promise connection
+// const connectionPromise = pool.promise();
 
-  config.pool.max = 5;
-  config.pool.min = 5;
-  config.pool.acquireTimeoutMillis = 60000; // 60 seconds
-  config.pool.createTimeoutMillis = 30000; // 30 seconds
-  config.pool.idleTimeoutMillis = 600000; // 10 minutes
-  config.pool.createRetryIntervalMillis = 200; // 0.2 seconds
+// const mysqlConnection = mysql.createConnection({
+//   host: '127.0.0.1',
+//   user: 'root',
+//   password: 'admin',
+//   database: 'capstoneDB',
+//   multipleStatements: true,
+// });
 
-  return createTcpPool(config);
-};
+// const query = 'SELECT * FROM capstoneDB.users';
 
-const ensureSchema = async (pool) => {
-  const hasTable = await pool.schema.hasTable('users');
-  console.log('hasTable users: ', hasTable);
-};
+// conne.connect((err) => {
+//   if (!err) {
+//     console.log('Connected to MySQL DB');
+//   } else {
+//     console.log('Connection to MySQL DB Failed');
+//   }
+// });
 
-const createPoolAndEnsureSchema = async () =>
-  await createPool()
-    .then(async (pool) => {
-      await ensureSchema(pool);
-      return pool;
-    })
-    .catch((err) => {
-      //   logger.error(err);
-      throw err;
-    });
+// const check_email_exist = async (email) => {
+//   let query = 'SELECT * FROM capstoneDB.users WHERE email = ?';
 
-const InitializeDB = async () => {
-  if (pool) {
-    console.log('pool exists: ', pool);
-    return;
-  }
-  try {
-    pool = await createPoolAndEnsureSchema();
-    console.log('users: ', (await pool('users').select('*')).length);
-    return;
-  } catch (err) {
-    console.error(err);
-    return;
-  }
-};
+//   try {
+//     const results = await pool.query(query, [email]);
 
-// Function to retrieve the pool
-const getPool = async () => {
-  try {
-    pool = await createPoolAndEnsureSchema();
-    console.log('users: ', (await pool('users').select('*')).length);
-    return pool;
-  } catch (err) {
-    console.error(err);
-    return;
-  }
-};
+//     if (results.length === 0) {
+//       console.log('Email does not exist');
+//       return []; // Or handle accordingly
+//     } else {
+//       console.log('Email exists');
+//       return results; // Or handle accordingly
+//     }
+//   } catch (err) {
+//     console.error(err);
+//     throw err;
+//   }
+// };
 
-// Function to get tables
-const getTables = async (req, res) => {
-  try {
-    const user = await pool('users').select('*');
-    console.log(user);
-    res.status(200).json({ user });
-    return;
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-    return;
-  }
-};
+async function check_email_exist() {
+  const query = 'SELECT * FROM capstoneDB.users WHERE email = ?';
+  const [rows, fields] = await pool.conn;
+}
 
-const check_email_exist = async (email) => {
-  try {
-    const emailExists = await pool('users').select('*').where('email', email);
-    // console.log('emailExists: ', emailExists);
-    return emailExists;
-  } catch (err) {
-    throw Error(err);
-  }
-};
+let ret = check_email_exist('aidan@gmail.com');
+console.log('ret', ret);
+const insert_user = (user) => {
+  const { firstname, lastname, email, phonenumber, password } = user;
 
-const insertUser = async (user) => {
-  try {
-    await pool('users').insert(user);
-    return 'success insert user';
-  } catch (err) {
-    throw Error(err);
-  }
+  let query = `INSERT INTO capstoneDB.users (firstname, lastname, email, phonenumber, password) VALUES (?,?,?,?,?)`;
+  pool.query(
+    query,
+    [firstname, lastname, email, phonenumber, password],
+    (err, results) => {
+      if (err) {
+        console.error(err);
+      } else {
+        console.log(results);
+        return results;
+      }
+    }
+  );
 };
 
 module.exports = {
-  createTcpPool,
-  createPoolAndEnsureSchema,
-  InitializeDB,
-  getPool,
-  getTables,
   check_email_exist,
-  insertUser,
+  insert_user,
 };
