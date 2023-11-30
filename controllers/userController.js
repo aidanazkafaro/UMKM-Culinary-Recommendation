@@ -1,36 +1,22 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
-const mysql = require('mysql2');
 const dotenv = require('dotenv');
+const connection = require('../database/database');
 dotenv.config();
 
-// Create the connection pool. The pool-specific settings are the defaults
-const pool = mysql.createPool({
-  host: 'localhost',
-  user: 'root',
-  database: 'capstoneDB',
-  password: 'admin',
-  waitForConnections: true,
-  connectionLimit: 10,
-  maxIdle: 10, // max idle connections, the default value is the same as `connectionLimit`
-  idleTimeout: 60000, // idle connections timeout, in milliseconds, the default value 60000
-  queueLimit: 0,
-  enableKeepAlive: true,
-  keepAliveInitialDelay: 0,
-});
 const check_email_exist = (email) => {
   return new Promise((resolve, reject) => {
-    let query = 'SELECT * FROM capstoneDB.users WHERE email = ?';
+    let query = 'SELECT * FROM users WHERE email = ?';
 
-    pool.query(query, [email], (error, results) => {
+    connection.query(query, [email], (error, results) => {
       if (error) {
         console.log(error);
         reject('Database error');
       } else if (results.length === 0) {
-        console.log('Email does not exist');
+        // console.log('Email does not exist');
         resolve([]);
       } else {
-        console.log('Email exists');
+        // console.log('Email exists');
         resolve(results); // Changed to directly resolve the array
       }
     });
@@ -40,8 +26,8 @@ const check_email_exist = (email) => {
 const insert_user = (user) => {
   const { firstname, lastname, email, phonenumber, password } = user;
 
-  let query = `INSERT INTO capstoneDB.users (firstname, lastname, email, phonenumber, password) VALUES (?,?,?,?,?)`;
-  pool.query(
+  let query = `INSERT INTO users (firstname, lastname, email, phonenumber, hashedPassword) VALUES (?,?,?,?,?)`;
+  connection.query(
     query,
     [firstname, lastname, email, phonenumber, password],
     (err, results) => {
@@ -67,7 +53,7 @@ const registerUser = async (req, res) => {
 
   try {
     let emailExists = await check_email_exist(email);
-    console.log('emailExists: ', emailExists);
+    // console.log('emailExists: ', emailExists);
     if (emailExists.length !== 0) {
       return res.status(400).json({
         error: 'Email exists. No need to register again.',
@@ -89,7 +75,7 @@ const registerUser = async (req, res) => {
             process.env.SECRET_KEY
           );
           res.status(200).json({
-            message: 'User added to database, not verified',
+            message: 'User added to database.',
             token: token,
           });
         } catch (err) {
@@ -110,24 +96,20 @@ const registerUser = async (req, res) => {
 
 const loginUser = async (req, res) => {
   const { email, password } = req.body;
-  console.log('email: ', email);
-  console.log('password: ', password);
+  // console.log('email: ', email);
+  // console.log('password: ', password);
   try {
     let userExists = await check_email_exist(email);
     console.log('userExists: ', userExists);
     //Verifying if the user exists in the database
     if (userExists.length === 0) {
-      res.status(400).json({
+      res.status(401).json({
         error: 'User is not registered, Sign Up first',
       });
     } else {
-      bcrypt.compare(password, userExists[0].password, (err, result) => {
+      bcrypt.compare(password, userExists[0].hashedPassword, (err, result) => {
         //Comparing the hashed password
-        if (err) {
-          res.status(500).json({
-            error: 'Server error',
-          });
-        } else if (result === true) {
+        if (result === true) {
           //Checking if credentials match
           const token = jwt.sign(
             {
@@ -138,9 +120,9 @@ const loginUser = async (req, res) => {
           res.status(200).json({
             message: 'User signed in!',
             user: {
-              firstname: userExists[0]['FirstName'],
-              lastname: userExists[0]['LastName'],
-              email: userExists[0]['Email'],
+              firstname: userExists[0]['firstName'],
+              lastname: userExists[0]['lastName'],
+              email: userExists[0]['email'],
               phonenumber: userExists[0]['phoneNumber'],
             },
             token: token,
