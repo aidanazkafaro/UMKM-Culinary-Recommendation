@@ -1,4 +1,5 @@
 runtime: nodejs18
+env: standard
 
 env_variables:
   INSTANCE_CONNECTION_NAME: umkm-culinary-recommendation:us-central1:ucr-db
